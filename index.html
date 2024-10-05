@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Square Game</title>
+    <style>
+      body {
+    margin: 0;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #1a1a1a; /* Темный фон для неонового стиля */
+}
+
+#menu, #gameOver, #levelSelect {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+    background-color: #333;
+    color: white;
+}
+
+#menu button, #gameOver button, #levelSelect button {
+    padding: 20px;
+    font-size: 24px;
+    margin: 10px;
+    cursor: pointer;
+    background-color: #4CAF50; /* Цвет кнопок */
+    border: none;
+    border-radius: 5px;
+    color: white;
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.8); /* Эффект свечения для кнопок */
+}
+
+#game {
+    display: none;
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background-color: #1a1a1a; /* Темный фон для игры */
+    border: 5px solid #00ffcc;
+}
+
+.square {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    background-color:  rgba(0, 255, 204, 1); /* Яркий неоновый цвет */
+    box-shadow: 0 0 10px rgba(0, 255, 204, 1); /* Эффект свечения для квадрата */
+   
+}
+
+.monster {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background-color: #ff0033; /* Яркий неоновый цвет для монстров */
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 0, 51, 1); /* Эффект свечения для монстров */
+}
+
+#lives {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 24px;
+    color: #ffffff; /* Цвет текста жизней */
+}
+
+    </style>
+</head>
+<body>
+
+<div id="menu">
+    <h1>Main Menu</h1>
+    <button id="playButton">Play</button>
+    <button id="levelButton">Level</button>
+</div>
+
+<div id="levelSelect" style="display: none;">
+    <h1>Select Level</h1>
+    <button data-level="easy">Easy</button>
+    <button data-level="medium">Medium</button>
+    <button data-level="hard">Hard</button>
+    <button data-level="hardcore">Hardcore</button>
+    <button data-level="extra">Extra</button>
+</div>
+
+<div id="game">
+    <div id="player" class="square"></div>
+    <div id="lives">Lives: 3</div>
+</div>
+
+<div id="gameOver" style="display: none;">
+    <h1>You Lost</h1>
+    <button id="retryButton">Play Again</button>
+    <button id="mainMenuButton">Main Menu</button>
+</div>
+
+<script>
+const playButton = document.getElementById('playButton');
+const levelButton = document.getElementById('levelButton');
+const menu = document.getElementById('menu');
+const levelSelect = document.getElementById('levelSelect');
+const game = document.getElementById('game');
+const player = document.getElementById('player');
+const livesText = document.getElementById('lives');
+const gameOver = document.getElementById('gameOver');
+const retryButton = document.getElementById('retryButton');
+const mainMenuButton = document.getElementById('mainMenuButton');
+
+let playerX = window.innerWidth / 2 - 25;
+let playerY = window.innerHeight / 2 - 25;
+let velocityX = 0, velocityY = 0;
+let speed = 0.05;
+let monsters = [];
+let lives = 3;
+let monsterSpawnInterval = 3000;
+let monsterSpeed = 1;
+let bullets = [];
+const bulletSpeed = 5; // Скорость пули
+
+function spawnBullet(direction) {
+    const bullet = document.createElement('div');
+    bullet.classList.add('bullet');
+    bullet.style.width = '10px';
+    bullet.style.height = '10px';
+    bullet.style.backgroundColor = '#fff'; // Цвет пули
+    bullet.style.position = 'absolute';
+    bullet.style.left = playerX + 20 + 'px'; // Центрируем пулю по X
+    bullet.style.top = playerY + 20 + 'px'; // Центрируем пулю по Y
+    game.appendChild(bullet);
+    bullets.push({ element: bullet, direction }); // Сохраняем элемент и направление
+}
+
+function moveBullets() {
+    bullets.forEach((bullet, index) => {
+        const bulletX = bullet.element.offsetLeft;
+        const bulletY = bullet.element.offsetTop;
+        
+        // Обновляем позицию пули
+        bullet.element.style.left = bulletX + bullet.direction.x * bulletSpeed + 'px';
+        bullet.element.style.top = bulletY + bullet.direction.y * bulletSpeed + 'px';
+
+        // Проверка столкновения с границами
+        if (bulletX < 0 || bulletX > game.offsetWidth || bulletY < 0 || bulletY > game.offsetHeight) {
+            game.removeChild(bullet.element);
+            bullets.splice(index, 1); // Удаляем пулю
+        } else {
+            checkBulletCollision(bullet.element, index);
+        }
+    });
+}
+
+function checkBulletCollision(bullet, bulletIndex) {
+    const bulletX = bullet.offsetLeft;
+    const bulletY = bullet.offsetTop;
+
+    // Проверяем столкновение с монстрами
+    monsters.forEach((monster, index) => {
+        const monsterX = monster.offsetLeft;
+        const monsterY = monster.offsetTop;
+
+        if (Math.abs(bulletX - monsterX) < 40 && Math.abs(bulletY - monsterY) < 40) {
+            game.removeChild(bullet);
+            bullets.splice(bulletIndex, 1);
+            game.removeChild(monster);
+            monsters.splice(index, 1);
+        }
+    });
+}
+
+// Обработка двойного и тройного нажатия на экран
+window.addEventListener('touchstart', () => {
+    tapCount++;
+
+    if (tapCount === 1) {
+        doubleTapTimeout = setTimeout(() => {
+            tapCount = 0; // Сбрасываем счетчик, если нет второго нажатия
+        }, 300); // Время на двойное нажатие
+    } else if (tapCount === 2) {
+        clearTimeout(doubleTapTimeout);
+        const randomDirection = getRandomDirection(); // Получаем случайное направление
+        spawnBullet(randomDirection); // Вызываем стрельбу
+        tapCount = 0; // Сбрасываем счетчик
+    } else if (tapCount === 3) {
+        clearTimeout(doubleTapTimeout);
+        spawnBullet({ x: 0, y: -1 }); // Выстрел вверх
+        spawnBullet({ x: 0, y: 1 });  // Выстрел вниз
+        spawnBullet({ x: -1, y: 0 }); // Выстрел влево
+        spawnBullet({ x: 1, y: 0 });  // Выстрел вправо
+        tapCount = 0; // Сбрасываем счетчик
+    }
+});
+
+// Функция для получения случайного направления
+function getRandomDirection() {
+    const angle = Math.random() * 2 * Math.PI; // Случайный угол
+    return { x: Math.cos(angle), y: Math.sin(angle) }; // Возвращаем x и y направления
+}
+
+// Вызывайте updateGame() в вашем основном цикле игры
+
+function startGame() {
+    menu.style.display = 'none';
+    game.style.display = 'block';
+    player.style.left = playerX + 'px';
+    player.style.top = playerY + 'px';
+
+    lives = 3;
+    livesText.textContent = `Lives: ${lives}`;
+
+    setInterval(spawnMonster, monsterSpawnInterval);
+    requestAnimationFrame(updateGame);
+}
+
+function updateGame() {
+    const gameRect = game.getBoundingClientRect();
+    const playerRect = player.getBoundingClientRect();
+
+    playerX += velocityX;
+    playerY += velocityY;
+
+    // Ограничение движения игрока границами контейнера игры с отталкиванием
+    if (playerX < 0) {
+        playerX = 0; // Устанавливаем куб на левой границе
+        velocityX = -velocityX; // Отталкиваемся от левой стенки
+    }
+    if (playerX + playerRect.width > gameRect.width) {
+        playerX = gameRect.width - playerRect.width; // Устанавливаем куб на правой границе
+        velocityX = -velocityX; // Отталкиваемся от правой стенки
+    }
+    if (playerY < 0) {
+        playerY = 0; // Устанавливаем куб на верхней границе
+        velocityY = -velocityY; // Отталкиваемся от верхней стенки
+    }
+    if (playerY + playerRect.height > gameRect.height) {
+        playerY = gameRect.height - playerRect.height; // Устанавливаем куб на нижней границе
+        velocityY = -velocityY; // Отталкиваемся от нижней стенки
+    }
+
+    player.style.left = playerX + 'px';
+    player.style.top = playerY + 'px';
+
+    moveMonsters();
+    checkCollisions();
+
+    if (lives > 0) {
+        requestAnimationFrame(updateGame);
+    } else {
+        endGame();
+    }
+}
+
+
+function spawnMonster() {
+    const monster = document.createElement('div');
+    monster.classList.add('monster');
+
+    monster.style.left = Math.random() * window.innerWidth + 'px';
+    monster.style.top = Math.random() * window.innerHeight + 'px';
+
+    game.appendChild(monster);
+    monsters.push(monster);
+}
+
+function moveMonsters() {
+    monsters.forEach((monster) => {
+        const monsterX = monster.offsetLeft;
+        const monsterY = monster.offsetTop;
+
+        const directionX = playerX - monsterX;
+        const directionY = playerY - monsterY;
+        const distance = Math.sqrt(directionX * directionX + directionY * directionY);
+
+        monster.style.left = monsterX + (directionX / distance) * monsterSpeed + 'px';
+        monster.style.top = monsterY + (directionY / distance) * monsterSpeed + 'px';
+    });
+}
+
+function checkCollisions() {
+    monsters.forEach((monster, index) => {
+        const monsterX = monster.offsetLeft;
+        const monsterY = monster.offsetTop;
+
+        if (Math.abs(monsterX - playerX) < 50 && Math.abs(monsterY - playerY) < 50) {
+            game.removeChild(monster);
+            monsters.splice(index, 1);
+            lives--;
+            livesText.textContent = `Lives: ${lives}`;
+        }
+    });
+}
+
+function endGame() {
+    // Удаление всех монстров
+    if (monsters.length > 0) {
+        monsters.forEach((monster) => {
+            game.removeChild(monster);
+        });
+        monsters = []; // Очищаем массив монстров
+    }
+
+    // Устанавливаем свойство отображения игры на 'none'
+    game.style.display = 'none';
+    
+    // Устанавливаем свойство отображения экрана "Game Over" на 'flex'
+    gameOver.style.display = 'flex';
+}
+
+
+// Выбор уровня сложности
+levelButton.addEventListener('click', () => {
+    menu.style.display = 'none';
+    levelSelect.style.display = 'flex';
+});
+
+levelSelect.addEventListener('click', (e) => {
+    const level = e.target.getAttribute('data-level');
+    switch(level) {
+        case 'easy':
+            monsterSpawnInterval = 4000;
+            monsterSpeed = 0.8;
+            break;
+        case 'medium':
+            monsterSpawnInterval = 3000;
+            monsterSpeed = 1;
+            break;
+        case 'hard':
+            monsterSpawnInterval = 2000;
+            monsterSpeed = 1.2;
+            break;
+        case 'hardcore':
+            monsterSpawnInterval = 1500;
+            monsterSpeed = 1.5;
+            break;
+        case 'extra':
+            monsterSpawnInterval = 1000;
+            monsterSpeed = 2;
+            break;
+    }
+    levelSelect.style.display = 'none';
+    startGame();
+});
+
+retryButton.addEventListener('click', () => {
+    gameOver.style.display = 'none';
+    startGame();
+});
+
+mainMenuButton.addEventListener('click', () => {
+    gameOver.style.display = 'none';
+    menu.style.display = 'flex';
+});
+
+// Управление игроком через касания экрана
+let touchStartX, touchStartY;
+window.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+});
+
+window.addEventListener('touchmove', (e) => {
+    let touchX = e.touches[0].clientX;
+    let touchY = e.touches[0].clientY;
+
+    velocityX = (touchX - touchStartX) * speed;
+    velocityY = (touchY - touchStartY) * speed;
+});
+
+window.addEventListener('touchend', () => {
+    velocityX *= 0.9;
+    velocityY *= 0.9;
+});
+
+playButton.addEventListener('click', startGame);
+
+</script>
+
+</body>
+</html>
